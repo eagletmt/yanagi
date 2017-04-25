@@ -56,8 +56,7 @@ impl TimerFd {
 
     pub fn read(&self) -> std::io::Result<u64> {
         let mut buf = 0 as u64;
-        let ptr: *mut u64 = &mut buf;
-        let rc = unsafe { libc::read(self.fd, ptr as *mut libc::c_void, 8) };
+        let rc = unsafe { libc::read(self.fd, &mut buf as *mut u64 as *mut libc::c_void, 8) };
         if rc == -1 {
             Err(std::io::Error::last_os_error())
         } else {
