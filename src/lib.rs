@@ -1,3 +1,6 @@
+mod epollfd;
+pub use epollfd::EpollFd;
+
 pub mod signalfd;
 pub use signalfd::SignalFd;
 
