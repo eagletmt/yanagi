@@ -62,9 +62,13 @@ fn main() {
                                                     println!("Sleep {} seconds", second);
                                                     let d = std::time::Duration::new(second, 0);
                                                     std::thread::sleep(d);
+                                                    println!("Sleep finished");
                                                 });
                 tx.send(Some(thread))
                     .expect("Unable to send thread handle");
+                epollfd
+                    .del(&timerfd)
+                    .expect("Unable to delete timerfd from epollfd");
             } else {
                 panic!("Unknown fd {}", fd);
             }

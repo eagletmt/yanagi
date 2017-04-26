@@ -31,6 +31,22 @@ impl EpollFd {
         }
     }
 
+    pub fn del<T>(&self, fd: &T) -> std::io::Result<()>
+        where T: std::os::unix::io::AsRawFd
+    {
+        let rc = unsafe {
+            libc::epoll_ctl(self.fd,
+                            libc::EPOLL_CTL_DEL,
+                            fd.as_raw_fd(),
+                            std::ptr::null_mut())
+        };
+        if rc == -1 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn wait(&self, maxevents: u32) -> std::io::Result<Vec<std::os::unix::io::RawFd>> {
         let mut events = Vec::with_capacity(maxevents as usize);
         let rc = unsafe { libc::epoll_wait(self.fd, events.as_mut_ptr(), maxevents as i32, -1) };
