@@ -1,4 +1,5 @@
 extern crate chrono;
+extern crate hyper;
 extern crate time;
 extern crate yanagi;
 
@@ -57,13 +58,7 @@ fn main() {
                 println!("Read {}", expirations);
                 println!("target: {}", target);
                 println!("now:    {}", now);
-                let thread = std::thread::spawn(move || {
-                                                    let second = 5;
-                                                    println!("Sleep {} seconds", second);
-                                                    let d = std::time::Duration::new(second, 0);
-                                                    std::thread::sleep(d);
-                                                    println!("Sleep finished");
-                                                });
+                let thread = std::thread::spawn(move || get_programs());
                 tx.send(Some(thread))
                     .expect("Unable to send thread handle");
                 epollfd
@@ -77,4 +72,16 @@ fn main() {
 
     println!("Waiting waiter...");
     waiter.join().expect("Unable to join waiter thread");
+}
+
+fn get_programs() {
+    let hyper = hyper::Client::new();
+    let syoboi = yanagi::syoboi_calendar::Client::new(hyper);
+    let response = syoboi
+        .cal_chk(&yanagi::syoboi_calendar::CalChkRequest::default())
+        .expect("Unable to get cal_chk.php");
+    println!("Got prog items");
+    for prog_item in response.prog_items.prog_items {
+        println!("{:?}", prog_item);
+    }
 }
