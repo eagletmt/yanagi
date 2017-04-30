@@ -1,6 +1,5 @@
 extern crate chrono;
 extern crate hyper;
-extern crate time;
 extern crate yanagi;
 
 use std::os::unix::io::AsRawFd;
@@ -10,7 +9,7 @@ fn main() {
 
     let signalfd =
         yanagi::SignalFd::new(&[yanagi::signalfd::SIGINT]).expect("Unable to create signalfd");
-    let target = chrono::Local::now() + time::Duration::seconds(3);
+    let target = chrono::Local::now() + chrono::Duration::seconds(3);
     let timerfd = yanagi::TimerFd::new(target).expect("Unable to create timerfd");
 
     let waiter = std::thread::spawn(move || loop {
@@ -81,7 +80,13 @@ fn get_programs() {
         .cal_chk(&yanagi::syoboi_calendar::CalChkRequest::default())
         .expect("Unable to get cal_chk.php");
     println!("Got prog items");
-    for prog_item in response.prog_items.prog_items {
-        println!("{:?}", prog_item);
+    for prog in response.prog_items.prog_items {
+        println!("{} - {} {} #{} {} ({})",
+                 prog.start_time(),
+                 prog.end_time(),
+                 prog.title,
+                 prog.count,
+                 prog.sub_title,
+                 prog.ch_name);
     }
 }

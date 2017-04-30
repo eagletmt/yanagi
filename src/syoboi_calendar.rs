@@ -32,27 +32,27 @@ pub struct ProgItems {
 #[derive(Debug, Deserialize)]
 pub struct ProgItem {
     #[serde(rename = "TID")]
-    tid: u32,
+    pub tid: u32,
     #[serde(rename = "PID")]
-    pid: u32,
+    pub pid: u32,
     #[serde(rename = "StTime", deserialize_with="deserialize_time")]
-    st_time: chrono::DateTime<chrono::Local>,
+    pub st_time: chrono::DateTime<chrono::Local>,
     #[serde(rename = "EdTime", deserialize_with="deserialize_time")]
-    ed_time: chrono::DateTime<chrono::Local>,
+    pub ed_time: chrono::DateTime<chrono::Local>,
     #[serde(rename = "ChName")]
-    ch_name: String,
+    pub ch_name: String,
     #[serde(rename = "ChID")]
-    ch_id: u32,
+    pub ch_id: u32,
     #[serde(rename = "Count")]
-    count: String,
+    pub count: String,
     #[serde(rename = "StOffset")]
-    st_offset: i64,
+    pub st_offset: i64,
     #[serde(rename = "SubTitle")]
-    sub_title: String,
+    pub sub_title: String,
     #[serde(rename = "Title")]
-    title: String,
+    pub title: String,
     #[serde(rename = "ProgComment")]
-    prog_comment: String,
+    pub prog_comment: String,
 }
 
 fn deserialize_time<D>(deserializer: D) -> Result<chrono::DateTime<chrono::Local>, D::Error>
@@ -66,6 +66,16 @@ fn deserialize_time<D>(deserializer: D) -> Result<chrono::DateTime<chrono::Local
     match chrono::FixedOffset::east(9 * 3600).datetime_from_str(&s, "%Y%m%d%H%M%S") {
         Ok(t) => Ok(t.with_timezone(&chrono::Local)),
         Err(e) => Err(serde::de::Error::custom(e)),
+    }
+}
+
+impl ProgItem {
+    pub fn start_time(&self) -> chrono::DateTime<chrono::Local> {
+        self.st_time + chrono::Duration::seconds(self.st_offset)
+    }
+
+    pub fn end_time(&self) -> chrono::DateTime<chrono::Local> {
+        self.ed_time + chrono::Duration::seconds(self.st_offset)
     }
 }
 
