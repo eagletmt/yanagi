@@ -12,24 +12,7 @@ fn main() {
     let target = chrono::Local::now() + chrono::Duration::seconds(3);
     let timerfd = yanagi::TimerFd::new(target).expect("Unable to create timerfd");
 
-    let waiter = std::thread::spawn(move || loop {
-                                        match rx.recv() {
-                                            Ok(Some(t)) => {
-            println!("Received thread");
-            let r = t.join();
-            if let Err(_) = r {
-                println!("Thread paniced");
-            }
-        }
-                                            Ok(None) => {
-            println!("Stop waiter");
-            break;
-        }
-                                            Err(e) => {
-            panic!("Unable to recv thread: {}", e);
-        }
-                                        }
-                                    });
+    let waiter = std::thread::spawn(move || run_waiter(rx));
 
     let epollfd = yanagi::EpollFd::new().expect("Unable to create epoll");
     epollfd
@@ -71,6 +54,27 @@ fn main() {
 
     println!("Waiting waiter...");
     waiter.join().expect("Unable to join waiter thread");
+}
+
+fn run_waiter(rx: std::sync::mpsc::Receiver<Option<std::thread::JoinHandle<()>>>) {
+    loop {
+        match rx.recv() {
+            Ok(Some(t)) => {
+                println!("Received thread");
+                let r = t.join();
+                if let Err(_) = r {
+                    println!("Thread paniced");
+                }
+            }
+            Ok(None) => {
+                println!("Stop waiter");
+                break;
+            }
+            Err(e) => {
+                panic!("Unable to recv thread: {}", e);
+            }
+        }
+    }
 }
 
 fn get_programs() {
