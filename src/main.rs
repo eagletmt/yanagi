@@ -6,10 +6,19 @@ use std::os::unix::io::AsRawFd;
 
 fn main() {
     let (tx, rx) = std::sync::mpsc::channel::<Option<std::thread::JoinHandle<()>>>();
+    let db = yanagi::Database::new("postgresql://eagletmt@localhost/yanagi").expect("Unable to connect to PostgreSQL");
+    let now = chrono::Local::now();
+
+    db.initialize_tables()
+        .expect("Unable to initialize tables");
+    let jobs = db.get_jobs(&now).expect("Unable to get jobs");
+    for job in jobs {
+        println!("pid={} will start at {}", job.pid, job.enqueued_at);
+    }
 
     let signalfd =
         yanagi::SignalFd::new(&[yanagi::signalfd::SIGINT]).expect("Unable to create signalfd");
-    let target = chrono::Local::now() + chrono::Duration::seconds(3);
+    let target = now + chrono::Duration::seconds(3);
     let timerfd = yanagi::TimerFd::new(target).expect("Unable to create timerfd");
 
     let waiter = std::thread::spawn(move || run_waiter(rx));

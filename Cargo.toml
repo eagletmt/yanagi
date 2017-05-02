@@ -10,3 +10,4 @@ hyper = "0.10"
 serde = "0.9"
 serde_derive = "0.9"
 serde-xml-rs = "0.1"
+postgres = { version = "0.14", features = ["with-chrono"] }
