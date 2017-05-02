@@ -5,9 +5,38 @@ pub struct Database {
     conn: postgres::Connection,
 }
 
+#[derive(Debug)]
 pub struct ScheduledJob {
     pub pid: i32,
     pub enqueued_at: chrono::DateTime<chrono::Local>,
+}
+
+#[derive(Debug)]
+pub struct Program {
+    pub pid: i32,
+    pub tid: i32,
+    pub st_time: chrono::DateTime<chrono::Local>,
+    pub ed_time: chrono::DateTime<chrono::Local>,
+    pub count: String,
+    pub st_offset: i32,
+    pub subtitle: String,
+    pub title: String,
+    pub comment: String,
+}
+
+impl Program {
+    pub fn filename(&self) -> String {
+        let mut fname = format!("{}_{} {} #{} {}",
+                                self.tid,
+                                self.pid,
+                                self.title,
+                                self.count,
+                                self.subtitle);
+        if !self.comment.is_empty() {
+            fname.push_str(&format!(" ({})", self.comment));
+        }
+        fname.replace("/", "／")
+    }
 }
 
 impl Database {
@@ -18,6 +47,22 @@ impl Database {
     }
 
     pub fn initialize_tables(&self) -> Result<(), postgres::error::Error> {
+        self.conn
+            .execute(r#"
+        create table if not exists programs (
+            pid integer not null primary key
+            , tid integer not null
+            , st_time timestamp with time zone not null
+            , ed_time timestamp with time zone not null
+            , channel_id integer not null
+            , count varchar(16) not null
+            , st_offset integer not null
+            , subtitle varchar(255) not null
+            , title varchar(255) not null
+            , comment varchar(255) not null
+        )
+        "#,
+                     &[])?;
         self.conn
             .execute(r#"
         create table if not exists jobs (
@@ -45,5 +90,40 @@ impl Database {
                         }
                     })
                .collect())
+    }
+
+    pub fn get_program(&self, pid: i32) -> Result<Option<Program>, postgres::error::Error> {
+        let rows = self.conn
+            .query(r#"
+            select
+                p.pid
+                , p.tid
+                , p.st_time
+                , p.ed_time
+                , p.count
+                , p.st_offset
+                , p.subtitle
+                , p.title
+                , p.comment
+            from programs p
+            where p.pid = $1
+        "#,
+                   &[&pid])?;
+
+        Ok(rows.into_iter()
+               .next()
+               .map(|row| {
+            Program {
+                pid: row.get("pid"),
+                tid: row.get("tid"),
+                st_time: row.get("st_time"),
+                ed_time: row.get("ed_time"),
+                count: row.get("count"),
+                st_offset: row.get("st_offset"),
+                subtitle: row.get("subtitle"),
+                title: row.get("title"),
+                comment: row.get("comment"),
+            }
+        }))
     }
 }

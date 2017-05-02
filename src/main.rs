@@ -47,9 +47,13 @@ fn main() {
             } else if let Some((timerfd, job)) = timerfds.remove(&fd) {
                 let expirations = timerfd.read().expect("Unable to read timerfd");
                 println!("Read {}", expirations);
-                println!("target: {}", job.enqueued_at);
-                println!("now:    {}", chrono::Local::now());
-                let thread = std::thread::spawn(move || get_programs());
+                println!("now:         {}", chrono::Local::now());
+                println!("enqueued_at: {}", job.enqueued_at);
+                println!("pid: {}", job.pid);
+                let program = db.get_program(job.pid)
+                    .expect("Unable to get program")
+                    .expect("Unable to find specified program");
+                let thread = std::thread::spawn(move || get_programs(program));
                 tx.send(Some(thread))
                     .expect("Unable to send thread handle");
                 epollfd
@@ -86,7 +90,12 @@ fn run_waiter(rx: std::sync::mpsc::Receiver<Option<std::thread::JoinHandle<()>>>
     }
 }
 
-fn get_programs() {
+fn get_programs(program: yanagi::database::Program) {
+    let duration = program.ed_time.timestamp() - program.st_time.timestamp();
+    println!("Record {} for {} seconds", program.filename(), duration);
+    std::thread::sleep(std::time::Duration::new(duration as u64, 0));
+    println!("Record {} finished", program.filename());
+    /*
     let hyper = hyper::Client::new();
     let syoboi = yanagi::syoboi_calendar::Client::new(hyper);
     let response = syoboi
@@ -102,4 +111,5 @@ fn get_programs() {
                  prog.sub_title,
                  prog.ch_name);
     }
+    */
 }
