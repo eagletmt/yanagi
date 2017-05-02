@@ -12,22 +12,23 @@ fn main() {
     db.initialize_tables()
         .expect("Unable to initialize tables");
     let jobs = db.get_jobs(&now).expect("Unable to get jobs");
-    for job in jobs {
-        println!("pid={} will start at {}", job.pid, job.enqueued_at);
-    }
 
     let signalfd =
         yanagi::SignalFd::new(&[yanagi::signalfd::SIGINT]).expect("Unable to create signalfd");
-    let target = now + chrono::Duration::seconds(3);
-    let timerfd = yanagi::TimerFd::new(target).expect("Unable to create timerfd");
-
-    let waiter = std::thread::spawn(move || run_waiter(rx));
-
     let epollfd = yanagi::EpollFd::new().expect("Unable to create epoll");
     epollfd
         .add_in(&signalfd)
         .expect("Unable to add signalfd");
-    epollfd.add_in(&timerfd).expect("Unable to add timerfd");
+
+    let mut timerfds = std::collections::HashMap::new();
+    for job in jobs {
+        println!("pid={} will start at {}", job.pid, job.enqueued_at);
+        let timerfd = yanagi::TimerFd::new(job.enqueued_at).expect("Unable to create timerfd");
+        epollfd.add_in(&timerfd).expect("Unable to add timerfd");
+        timerfds.insert(timerfd.as_raw_fd(), (timerfd, job));
+    }
+
+    let waiter = std::thread::spawn(move || run_waiter(rx));
 
     'eventloop: loop {
         let fds = epollfd.wait(64).expect("Unable to epoll_wait");
@@ -43,12 +44,11 @@ fn main() {
                     signum => panic!("Unexpected ssi_signo {}", signum),
                 }
                 break 'eventloop;
-            } else if fd == timerfd.as_raw_fd() {
+            } else if let Some((timerfd, job)) = timerfds.remove(&fd) {
                 let expirations = timerfd.read().expect("Unable to read timerfd");
-                let now = chrono::Local::now();
                 println!("Read {}", expirations);
-                println!("target: {}", target);
-                println!("now:    {}", now);
+                println!("target: {}", job.enqueued_at);
+                println!("now:    {}", chrono::Local::now());
                 let thread = std::thread::spawn(move || get_programs());
                 tx.send(Some(thread))
                     .expect("Unable to send thread handle");
