@@ -29,6 +29,7 @@ fn main() {
     }
 
     let waiter = std::thread::spawn(move || run_waiter(rx));
+    let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
 
     'eventloop: loop {
         let fds = epollfd.wait(64).expect("Unable to epoll_wait");
@@ -50,10 +51,8 @@ fn main() {
                 println!("now:         {}", chrono::Local::now());
                 println!("enqueued_at: {}", job.enqueued_at);
                 println!("pid: {}", job.pid);
-                let program = db.get_program(job.pid)
-                    .expect("Unable to get program")
-                    .expect("Unable to find specified program");
-                let thread = std::thread::spawn(move || get_programs(program));
+                let arc = db_arc.clone();
+                let thread = std::thread::spawn(move || get_programs(arc, job.pid));
                 tx.send(Some(thread))
                     .expect("Unable to send thread handle");
                 epollfd
@@ -90,10 +89,24 @@ fn run_waiter(rx: std::sync::mpsc::Receiver<Option<std::thread::JoinHandle<()>>>
     }
 }
 
-fn get_programs(program: yanagi::database::Program) {
+fn get_programs(db_arc: std::sync::Arc<std::sync::Mutex<yanagi::Database>>, pid: i32) {
+    let program = db_arc
+        .lock()
+        .expect("Unable to lock Database mutex")
+        .get_program(pid)
+        .expect("Unable to get program")
+        .expect("Unable to find specified program");
     let duration = program.ed_time.timestamp() - program.st_time.timestamp();
     println!("Record {} for {} seconds", program.filename(), duration);
+
     std::thread::sleep(std::time::Duration::new(duration as u64, 0));
+
+    let program = db_arc
+        .lock()
+        .expect("Unable to lock Database mutex")
+        .get_program(pid)
+        .expect("Unable to get program")
+        .expect("Unable to find specified program");
     println!("Record {} finished", program.filename());
     /*
     let hyper = hyper::Client::new();
