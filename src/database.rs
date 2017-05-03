@@ -83,16 +83,13 @@ impl Database {
     pub fn initialize_tables(&self) -> Result<(), postgres::error::Error> {
         let conn = self.conn.lock().expect("Unable to acquire lock");
 
-        conn.execute(r#"
+        conn.batch_execute(r#"
         create table if not exists channels (
             id serial not null primary key
             , name varchar(255) not null unique
             , for_recorder integer not null unique
             , for_syoboi integer not null unique
-        )
-        "#,
-                     &[])?;
-        conn.execute(r#"
+        );
         create table if not exists programs (
             pid integer not null primary key
             , tid integer not null
@@ -104,18 +101,14 @@ impl Database {
             , subtitle varchar(255) not null
             , title varchar(255) not null
             , comment varchar(255) not null
-        )
-        "#,
-                     &[])?;
-        conn.execute(r#"
+        );
         create table if not exists jobs (
             pid integer not null primary key references programs (pid)
             , enqueued_at timestamp with time zone not null
             , finished_at timestamp with time zone
             , created_at timestamp with time zone not null
-        )
-        "#,
-                     &[])?;
+        );
+        "#)?;
         Ok(())
     }
 
