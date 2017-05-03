@@ -221,7 +221,7 @@ impl Database {
 
     pub fn get_channels(&self) -> Result<Vec<Channel>, postgres::error::Error> {
         let conn = self.conn.lock().expect("Unable to acquire lock");
-        let rows = conn.query("select id, name, for_recorder, for_syoboi from channels",
+        let rows = conn.query("select id, name, for_recorder, for_syoboi from channels order by id",
                               &[])?;
         Ok(rows.into_iter()
                .map(|row| {
