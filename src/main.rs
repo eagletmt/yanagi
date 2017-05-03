@@ -1,13 +1,6 @@
 extern crate chrono;
-extern crate hyper;
 extern crate iron;
 extern crate yanagi;
-extern crate serde_json;
-
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate router;
 
 use std::os::unix::io::AsRawFd;
 
@@ -29,8 +22,9 @@ fn main() {
 
     let db_arc = std::sync::Arc::new(db);
 
-    let mut listening =
-        run_web("localhost:3000", db_arc.clone()).expect("Unable start HTTP server");
+    let mut listening = iron::Iron::new(yanagi::Web::new(db_arc.clone()))
+        .http("localhost:3000")
+        .expect("Unable start HTTP server");
 
     let mut timerfds = std::collections::HashMap::new();
     for job in jobs {
@@ -136,58 +130,4 @@ fn get_programs(db_arc: std::sync::Arc<yanagi::Database>, pid: i32) {
                  prog.ch_name);
     }
     */
-}
-
-fn run_web<A>(addr: A,
-              db_arc: std::sync::Arc<yanagi::Database>)
-              -> Result<iron::Listening, iron::error::HttpError>
-    where A: std::net::ToSocketAddrs
-{
-    let router = router!{
-        jobs_index: get "/v1/jobs" => JobsIndexHandler::new(db_arc.clone()),
-    };
-    iron::Iron::new(router).http(addr)
-}
-
-struct JobsIndexHandler {
-    db_arc: std::sync::Arc<yanagi::Database>,
-}
-
-impl JobsIndexHandler {
-    fn new(db_arc: std::sync::Arc<yanagi::Database>) -> Self {
-        Self { db_arc: db_arc }
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct ErrorResponse<'a> {
-    error: &'a str,
-}
-
-fn error_response<E>(response: iron::Response, err: E) -> iron::Response
-    where E: std::error::Error
-{
-    use iron::Set;
-
-    let json = serde_json::to_string(&ErrorResponse { error: err.description() }).expect("Unable to serialize error message");
-    response.set((iron::status::InternalServerError, json))
-}
-
-impl iron::middleware::Handler for JobsIndexHandler {
-    fn handle(&self, _: &mut iron::Request) -> Result<iron::Response, iron::IronError> {
-        use iron::Set;
-
-        let now = chrono::Local::now();
-        let mut response = iron::Response::new();
-        response.headers.set(iron::headers::ContentType::json());
-        match self.db_arc.get_jobs(&now) {
-            Ok(jobs) => {
-                match serde_json::to_string(&jobs) {
-                    Ok(jobs_json) => Ok(response.set((iron::status::Ok, jobs_json))),
-                    Err(err) => Ok(error_response(response, err)),
-                }
-            }
-            Err(err) => Ok(error_response(response, err)),
-        }
-    }
 }
