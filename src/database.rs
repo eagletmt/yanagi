@@ -22,11 +22,13 @@ fn serialize_datetime<S>(datetime: &chrono::DateTime<chrono::Local>,
     serializer.serialize_str(&datetime.to_rfc3339())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Program {
     pub pid: i32,
     pub tid: i32,
+    #[serde(serialize_with="serialize_datetime")]
     pub st_time: chrono::DateTime<chrono::Local>,
+    #[serde(serialize_with="serialize_datetime")]
     pub ed_time: chrono::DateTime<chrono::Local>,
     pub count: String,
     pub st_offset: i32,
@@ -35,6 +37,13 @@ pub struct Program {
     pub comment: String,
     pub channel_name: String,
     pub channel_for_recorder: i32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Schedule {
+    #[serde(serialize_with="serialize_datetime")]
+    pub enqueued_at: chrono::DateTime<chrono::Local>,
+    pub program: Program,
 }
 
 #[derive(Debug, Serialize)]
@@ -125,6 +134,56 @@ impl Database {
                     })
                .collect())
     }
+
+    pub fn get_schedules(&self,
+                         now: &chrono::DateTime<chrono::Local>)
+                         -> Result<Vec<Schedule>, postgres::error::Error> {
+        let conn = self.conn.lock().expect("Unable to acquire lock");
+        let rows = conn.query(r#"
+            select
+                j.enqueued_at
+                , p.pid
+                , p.tid
+                , p.st_time
+                , p.ed_time
+                , p.count
+                , p.st_offset
+                , p.subtitle
+                , p.title
+                , p.comment
+                , c.name as channel_name
+                , c.for_recorder as channel_for_recorder
+            from
+                jobs j
+                inner join programs p using (pid)
+                inner join channels c on c.id = p.channel_id
+            where
+                j.enqueued_at >= $1
+            order by j.enqueued_at
+        "#,
+                              &[now])?;
+        Ok(rows.into_iter()
+               .map(|row| {
+            Schedule {
+                enqueued_at: row.get("enqueued_at"),
+                program: Program {
+                    pid: row.get("pid"),
+                    tid: row.get("tid"),
+                    st_time: row.get("st_time"),
+                    ed_time: row.get("ed_time"),
+                    count: row.get("count"),
+                    st_offset: row.get("st_offset"),
+                    subtitle: row.get("subtitle"),
+                    title: row.get("title"),
+                    comment: row.get("comment"),
+                    channel_name: row.get("channel_name"),
+                    channel_for_recorder: row.get("channel_for_recorder"),
+                },
+            }
+        })
+               .collect())
+    }
+
 
     pub fn get_program(&self, pid: i32) -> Result<Option<Program>, postgres::error::Error> {
         let conn = self.conn.lock().expect("Unable to acquire lock");

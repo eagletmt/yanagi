@@ -12,7 +12,7 @@ pub struct Web {
 impl Web {
     pub fn new(db_arc: std::sync::Arc<super::Database>) -> Self {
         let router = router! {
-            jobs_index: get "/v1/jobs" => JobsIndexHandler::new(db_arc.clone()),
+            schedules_index: get "/v1/schedules" => SchedulesIndexHandler::new(db_arc.clone()),
             channels_index: get "/v1/channels" => ChannelsIndexHandler::new(db_arc.clone()),
         };
 
@@ -60,33 +60,29 @@ fn respond_json<T, E>(result: Result<T, E>) -> Result<iron::Response, iron::Iron
     }
 }
 
-struct JobsIndexHandler {
+struct SchedulesIndexHandler {
     db_arc: std::sync::Arc<super::Database>,
 }
-
-impl JobsIndexHandler {
+impl SchedulesIndexHandler {
     fn new(db_arc: std::sync::Arc<super::Database>) -> Self {
         Self { db_arc: db_arc }
     }
 }
-
-impl iron::middleware::Handler for JobsIndexHandler {
+impl iron::middleware::Handler for SchedulesIndexHandler {
     fn handle(&self, _: &mut iron::Request) -> Result<iron::Response, iron::IronError> {
         let now = chrono::Local::now();
-        respond_json(self.db_arc.get_jobs(&now))
+        respond_json(self.db_arc.get_schedules(&now))
     }
 }
 
 struct ChannelsIndexHandler {
     db_arc: std::sync::Arc<super::Database>,
 }
-
 impl ChannelsIndexHandler {
     fn new(db_arc: std::sync::Arc<super::Database>) -> Self {
         Self { db_arc: db_arc }
     }
 }
-
 impl iron::middleware::Handler for ChannelsIndexHandler {
     fn handle(&self, _: &mut iron::Request) -> Result<iron::Response, iron::IronError> {
         respond_json(self.db_arc.get_channels())
