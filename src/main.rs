@@ -1,6 +1,13 @@
 extern crate chrono;
 extern crate hyper;
+extern crate iron;
 extern crate yanagi;
+extern crate serde_json;
+
+#[macro_use]
+extern crate serde_derive;
+#[macro_use]
+extern crate router;
 
 use std::os::unix::io::AsRawFd;
 
@@ -20,16 +27,19 @@ fn main() {
         .add_in(&signalfd)
         .expect("Unable to add signalfd");
 
+    let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
+
+    let mut listening =
+        run_web("localhost:3000", db_arc.clone()).expect("Unable start HTTP server");
+
     let mut timerfds = std::collections::HashMap::new();
     for job in jobs {
-        println!("pid={} will start at {}", job.pid, job.enqueued_at);
         let timerfd = yanagi::TimerFd::new(job.enqueued_at).expect("Unable to create timerfd");
         epollfd.add_in(&timerfd).expect("Unable to add timerfd");
         timerfds.insert(timerfd.as_raw_fd(), (timerfd, job));
     }
 
     let waiter = std::thread::spawn(move || run_waiter(rx));
-    let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
 
     'eventloop: loop {
         let fds = epollfd.wait(64).expect("Unable to epoll_wait");
@@ -66,6 +76,11 @@ fn main() {
 
     println!("Waiting waiter...");
     waiter.join().expect("Unable to join waiter thread");
+    // FIXME: This is NOT graceful shutdown.
+    // https://github.com/hyperium/hyper/pull/1013
+    println!("Shutting down server...");
+    listening.close().expect("Unable to shutdown server");
+    println!("Finished");
 }
 
 fn run_waiter(rx: std::sync::mpsc::Receiver<Option<std::thread::JoinHandle<()>>>) {
@@ -125,4 +140,61 @@ fn get_programs(db_arc: std::sync::Arc<std::sync::Mutex<yanagi::Database>>, pid:
                  prog.ch_name);
     }
     */
+}
+
+fn run_web<A>(addr: A,
+              db_arc: std::sync::Arc<std::sync::Mutex<yanagi::Database>>)
+              -> Result<iron::Listening, iron::error::HttpError>
+    where A: std::net::ToSocketAddrs
+{
+    let router = router!{
+        jobs_index: get "/v1/jobs" => JobsIndexHandler::new(db_arc.clone()),
+    };
+    iron::Iron::new(router).http(addr)
+}
+
+struct JobsIndexHandler {
+    db_arc: std::sync::Arc<std::sync::Mutex<yanagi::Database>>,
+}
+
+impl JobsIndexHandler {
+    fn new(db_arc: std::sync::Arc<std::sync::Mutex<yanagi::Database>>) -> Self {
+        Self { db_arc: db_arc }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct ErrorResponse<'a> {
+    error: &'a str,
+}
+
+fn error_response<E>(response: iron::Response, err: E) -> iron::Response
+    where E: std::error::Error
+{
+    use iron::Set;
+
+    let json = serde_json::to_string(&ErrorResponse { error: err.description() }).expect("Unable to serialize error message");
+    response.set((iron::status::InternalServerError, json))
+}
+
+impl iron::middleware::Handler for JobsIndexHandler {
+    fn handle(&self, _: &mut iron::Request) -> Result<iron::Response, iron::IronError> {
+        use iron::Set;
+
+        let now = chrono::Local::now();
+        let mut response = iron::Response::new();
+        response.headers.set(iron::headers::ContentType::json());
+        match self.db_arc
+                  .lock()
+                  .expect("Unable to lock Database mutex")
+                  .get_jobs(&now) {
+            Ok(jobs) => {
+                match serde_json::to_string(&jobs) {
+                    Ok(jobs_json) => Ok(response.set((iron::status::Ok, jobs_json))),
+                    Err(err) => Ok(error_response(response, err)),
+                }
+            }
+            Err(err) => Ok(error_response(response, err)),
+        }
+    }
 }

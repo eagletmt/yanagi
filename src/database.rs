@@ -1,14 +1,24 @@
 extern crate chrono;
 extern crate postgres;
+extern crate serde;
 
 pub struct Database {
     conn: postgres::Connection,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct ScheduledJob {
     pub pid: i32,
+    #[serde(serialize_with="serialize_datetime")]
     pub enqueued_at: chrono::DateTime<chrono::Local>,
+}
+
+fn serialize_datetime<S>(datetime: &chrono::DateTime<chrono::Local>,
+                         serializer: S)
+                         -> Result<S::Ok, S::Error>
+    where S: serde::Serializer
+{
+    serializer.serialize_str(&datetime.to_rfc3339())
 }
 
 #[derive(Debug)]
