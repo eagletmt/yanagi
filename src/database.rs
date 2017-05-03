@@ -37,7 +37,7 @@ pub struct Program {
     pub channel_for_recorder: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Channel {
     pub id: i32,
     pub name: String,
@@ -165,5 +165,21 @@ impl Database {
                 channel_for_recorder: row.get("channel_for_recorder"),
             }
         }))
+    }
+
+    pub fn get_channels(&self) -> Result<Vec<Channel>, postgres::error::Error> {
+        let conn = self.conn.lock().expect("Unable to acquire lock");
+        let rows = conn.query("select id, name, for_recorder, for_syoboi from channels",
+                              &[])?;
+        Ok(rows.into_iter()
+               .map(|row| {
+                        Channel {
+                            id: row.get("id"),
+                            name: row.get("name"),
+                            for_recorder: row.get("for_recorder"),
+                            for_syoboi: row.get("for_syoboi"),
+                        }
+                    })
+               .collect())
     }
 }
