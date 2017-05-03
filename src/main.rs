@@ -27,7 +27,7 @@ fn main() {
         .add_in(&signalfd)
         .expect("Unable to add signalfd");
 
-    let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
+    let db_arc = std::sync::Arc::new(db);
 
     let mut listening =
         run_web("localhost:3000", db_arc.clone()).expect("Unable start HTTP server");
@@ -104,10 +104,8 @@ fn run_waiter(rx: std::sync::mpsc::Receiver<Option<std::thread::JoinHandle<()>>>
     }
 }
 
-fn get_programs(db_arc: std::sync::Arc<std::sync::Mutex<yanagi::Database>>, pid: i32) {
+fn get_programs(db_arc: std::sync::Arc<yanagi::Database>, pid: i32) {
     let program = db_arc
-        .lock()
-        .expect("Unable to lock Database mutex")
         .get_program(pid)
         .expect("Unable to get program")
         .expect("Unable to find specified program");
@@ -117,8 +115,6 @@ fn get_programs(db_arc: std::sync::Arc<std::sync::Mutex<yanagi::Database>>, pid:
     std::thread::sleep(std::time::Duration::new(duration as u64, 0));
 
     let program = db_arc
-        .lock()
-        .expect("Unable to lock Database mutex")
         .get_program(pid)
         .expect("Unable to get program")
         .expect("Unable to find specified program");
@@ -143,7 +139,7 @@ fn get_programs(db_arc: std::sync::Arc<std::sync::Mutex<yanagi::Database>>, pid:
 }
 
 fn run_web<A>(addr: A,
-              db_arc: std::sync::Arc<std::sync::Mutex<yanagi::Database>>)
+              db_arc: std::sync::Arc<yanagi::Database>)
               -> Result<iron::Listening, iron::error::HttpError>
     where A: std::net::ToSocketAddrs
 {
@@ -154,11 +150,11 @@ fn run_web<A>(addr: A,
 }
 
 struct JobsIndexHandler {
-    db_arc: std::sync::Arc<std::sync::Mutex<yanagi::Database>>,
+    db_arc: std::sync::Arc<yanagi::Database>,
 }
 
 impl JobsIndexHandler {
-    fn new(db_arc: std::sync::Arc<std::sync::Mutex<yanagi::Database>>) -> Self {
+    fn new(db_arc: std::sync::Arc<yanagi::Database>) -> Self {
         Self { db_arc: db_arc }
     }
 }
@@ -184,10 +180,7 @@ impl iron::middleware::Handler for JobsIndexHandler {
         let now = chrono::Local::now();
         let mut response = iron::Response::new();
         response.headers.set(iron::headers::ContentType::json());
-        match self.db_arc
-                  .lock()
-                  .expect("Unable to lock Database mutex")
-                  .get_jobs(&now) {
+        match self.db_arc.get_jobs(&now) {
             Ok(jobs) => {
                 match serde_json::to_string(&jobs) {
                     Ok(jobs_json) => Ok(response.set((iron::status::Ok, jobs_json))),

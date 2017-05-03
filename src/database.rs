@@ -1,9 +1,10 @@
 extern crate chrono;
 extern crate postgres;
 extern crate serde;
+extern crate std;
 
 pub struct Database {
-    conn: postgres::Connection,
+    conn: std::sync::Mutex<postgres::Connection>,
 }
 
 #[derive(Debug, Serialize)]
@@ -64,12 +65,16 @@ impl Database {
     pub fn new<T>(params: T) -> Result<Self, postgres::error::ConnectError>
         where T: postgres::params::IntoConnectParams
     {
-        Ok(Self { conn: postgres::Connection::connect(params, postgres::TlsMode::None)? })
+        Ok(Self {
+               conn: std::sync::Mutex::new(postgres::Connection::connect(params,
+                                                                         postgres::TlsMode::None)?),
+           })
     }
 
     pub fn initialize_tables(&self) -> Result<(), postgres::error::Error> {
-        self.conn
-            .execute(r#"
+        let conn = self.conn.lock().expect("Unable to acquire lock");
+
+        conn.execute(r#"
         create table if not exists channels (
             id serial not null primary key
             , name varchar(255) not null unique
@@ -78,8 +83,7 @@ impl Database {
         )
         "#,
                      &[])?;
-        self.conn
-            .execute(r#"
+        conn.execute(r#"
         create table if not exists programs (
             pid integer not null primary key
             , tid integer not null
@@ -94,8 +98,7 @@ impl Database {
         )
         "#,
                      &[])?;
-        self.conn
-            .execute(r#"
+        conn.execute(r#"
         create table if not exists jobs (
             pid integer not null primary key references programs (pid)
             , enqueued_at timestamp with time zone not null
@@ -110,9 +113,9 @@ impl Database {
     pub fn get_jobs(&self,
                     now: &chrono::DateTime<chrono::Local>)
                     -> Result<Vec<ScheduledJob>, postgres::error::Error> {
-        let rows = self.conn
-            .query("select pid, enqueued_at from jobs where enqueued_at >= $1 order by enqueued_at",
-                   &[now])?;
+        let conn = self.conn.lock().expect("Unable to acquire lock");
+        let rows = conn.query("select pid, enqueued_at from jobs where enqueued_at >= $1 order by enqueued_at",
+                              &[now])?;
         Ok(rows.into_iter()
                .map(|row| {
                         ScheduledJob {
@@ -124,8 +127,8 @@ impl Database {
     }
 
     pub fn get_program(&self, pid: i32) -> Result<Option<Program>, postgres::error::Error> {
-        let rows = self.conn
-            .query(r#"
+        let conn = self.conn.lock().expect("Unable to acquire lock");
+        let rows = conn.query(r#"
             select
                 p.pid
                 , p.tid
@@ -143,7 +146,7 @@ impl Database {
                 inner join channels c on c.id = p.channel_id
             where p.pid = $1
         "#,
-                   &[&pid])?;
+                              &[&pid])?;
 
         Ok(rows.into_iter()
                .next()
