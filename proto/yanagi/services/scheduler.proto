@@ -1,0 +1,22 @@
+syntax = "proto3";
+package yanagi.services;
+
+import "yanagi/resources/job.proto";
+
+message GetJobsRequest {}
+message GetJobsResponse {
+  repeated yanagi.resources.Job jobs = 1;
+}
+
+message TrackTidRequest {
+  uint32 tid = 1;
+}
+message TrackTidResponse {
+  uint32 tid = 1;
+  string title = 2;
+}
+
+service Scheduler {
+  rpc GetJobs(GetJobsRequest) returns (GetJobsResponse);
+  rpc TrackTid(TrackTidRequest) returns (TrackTidResponse);
+}

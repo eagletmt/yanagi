@@ -1,48 +1,29 @@
-extern crate chrono;
-extern crate hyper;
-extern crate serde;
-extern crate serde_xml_rs;
-
-pub struct Client {
-    client: hyper::client::Client,
-}
-
-pub struct CalChkRequest {
-    pub days: Option<u32>,
-}
-
-impl Default for CalChkRequest {
-    fn default() -> Self {
-        Self { days: None }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CalChkResponse {
+#[derive(Debug, serde::Deserialize)]
+struct Syobocal {
     #[serde(rename = "ProgItems")]
-    pub prog_items: ProgItems,
+    prog_items: ProgItems,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ProgItems {
+#[derive(Debug, serde::Deserialize)]
+struct ProgItems {
     #[serde(rename = "ProgItem")]
-    pub prog_items: Vec<ProgItem>,
+    prog_items: Vec<ProgItem>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 pub struct ProgItem {
-    #[serde(rename = "TID")]
-    pub tid: u32,
     #[serde(rename = "PID")]
-    pub pid: u32,
-    #[serde(rename = "StTime", deserialize_with="deserialize_time")]
-    pub st_time: chrono::DateTime<chrono::Local>,
-    #[serde(rename = "EdTime", deserialize_with="deserialize_time")]
-    pub ed_time: chrono::DateTime<chrono::Local>,
+    pub pid: i32,
+    #[serde(rename = "TID")]
+    pub tid: i32,
+    #[serde(rename = "StTime", deserialize_with = "deserialize_time")]
+    pub st_time: chrono::NaiveDateTime,
+    #[serde(rename = "EdTime", deserialize_with = "deserialize_time")]
+    pub ed_time: chrono::NaiveDateTime,
     #[serde(rename = "ChName")]
     pub ch_name: String,
     #[serde(rename = "ChID")]
-    pub ch_id: u32,
+    pub ch_id: i32,
     #[serde(rename = "Count")]
     pub count: String,
     #[serde(rename = "StOffset")]
@@ -55,61 +36,51 @@ pub struct ProgItem {
     pub prog_comment: String,
 }
 
-fn deserialize_time<D>(deserializer: D) -> Result<chrono::DateTime<chrono::Local>, D::Error>
-    where D: serde::Deserializer
+fn deserialize_time<'de, D>(deserializer: D) -> Result<chrono::NaiveDateTime, D::Error>
+where
+    D: serde::Deserializer<'de>,
 {
-    use syoboi_calendar::serde::Deserialize;
-    use syoboi_calendar::chrono::TimeZone;
-
+    use serde::Deserialize as _;
     let s = String::deserialize(deserializer)?;
-    // JST
-    match chrono::FixedOffset::east(9 * 3600).datetime_from_str(&s, "%Y%m%d%H%M%S") {
-        Ok(t) => Ok(t.with_timezone(&chrono::Local)),
+    match chrono::NaiveDateTime::parse_from_str(&s, "%Y%m%d%H%M%S") {
+        Ok(t) => Ok(t),
         Err(e) => Err(serde::de::Error::custom(e)),
     }
 }
 
-impl ProgItem {
-    pub fn start_time(&self) -> chrono::DateTime<chrono::Local> {
-        self.st_time + chrono::Duration::seconds(self.st_offset)
-    }
-
-    pub fn end_time(&self) -> chrono::DateTime<chrono::Local> {
-        self.ed_time + chrono::Duration::seconds(self.st_offset)
-    }
+pub async fn cal_chk() -> Result<Vec<ProgItem>, anyhow::Error> {
+    let body = reqwest::get("https://cal.syoboi.jp/cal_chk.php?days=7")
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    let syobocal: Syobocal = serde_xml_rs::from_str(&body)?;
+    Ok(syobocal.prog_items.prog_items)
 }
 
-#[derive(Debug)]
-pub enum Error {
-    Hyper(hyper::Error),
-    Xml(serde_xml_rs::Error),
+#[derive(serde::Deserialize)]
+struct TitleMedium {
+    #[serde(rename = "Titles")]
+    titles: std::collections::HashMap<u32, TitleMediumInfo>,
 }
-impl From<hyper::Error> for Error {
-    fn from(e: hyper::Error) -> Self {
-        Error::Hyper(e)
-    }
-}
-impl From<serde_xml_rs::Error> for Error {
-    fn from(e: serde_xml_rs::Error) -> Self {
-        Error::Xml(e)
-    }
+#[derive(serde::Deserialize)]
+struct TitleMediumInfo {
+    #[serde(rename = "Title")]
+    title: String,
 }
 
-const BASE_URL: &'static str = "http://cal.syoboi.jp";
-
-impl Client {
-    pub fn new(client: hyper::client::Client) -> Self {
-        Self { client: client }
-    }
-
-    pub fn cal_chk(&self, params: &CalChkRequest) -> Result<CalChkResponse, Error> {
-        let mut url = format!("{}/cal_chk.php", BASE_URL);
-        if let Some(days) = params.days {
-            url.push_str(&format!("?days={}", days));
-        }
-        let response = self.client
-            .get("http://cal.syoboi.jp/cal_chk.php")
-            .send()?;
-        Ok(serde_xml_rs::deserialize(response)?)
+pub async fn title_medium(tid: u32) -> Result<Option<String>, anyhow::Error> {
+    let mut resp: TitleMedium = reqwest::get(&format!(
+        "https://cal.syoboi.jp/json.php?Req=TitleMedium&Tid={}",
+        tid
+    ))
+    .await?
+    .error_for_status()?
+    .json()
+    .await?;
+    if let Some(info) = resp.titles.remove(&tid) {
+        Ok(Some(info.title))
+    } else {
+        Ok(None)
     }
 }

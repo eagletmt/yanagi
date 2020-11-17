@@ -1,0 +1,17 @@
+syntax = "proto3";
+package yanagi.services;
+
+message StopRequest {}
+message StopResponse {}
+
+message ReloadRequest {}
+message ReloadResponse {}
+
+message RefreshRequest {}
+message RefreshResponse {}
+
+service System {
+  rpc Stop(StopRequest) returns (StopResponse);
+  rpc Reload(ReloadRequest) returns (ReloadResponse);
+  rpc Refresh(RefreshRequest) returns (RefreshResponse);
+}

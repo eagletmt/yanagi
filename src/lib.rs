@@ -1,21 +1,16 @@
-#[macro_use]
-extern crate router;
-#[macro_use]
-extern crate serde_derive;
+pub mod proto {
+    pub mod resources {
+        tonic::include_proto!("yanagi.resources");
+    }
+    pub mod services {
+        tonic::include_proto!("yanagi.services");
+    }
+}
 
-mod epollfd;
-pub use epollfd::EpollFd;
-
+pub mod server;
+pub(crate) mod types;
+pub(crate) mod services {
+    pub mod scheduler;
+    pub mod system;
+}
 pub mod syoboi_calendar;
-
-pub mod signalfd;
-pub use signalfd::SignalFd;
-
-mod timerfd;
-pub use timerfd::TimerFd;
-
-pub mod database;
-pub use database::Database;
-
-pub mod web;
-pub use web::Web;

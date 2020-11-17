@@ -2,15 +2,23 @@
 name = "yanagi"
 version = "0.1.0"
 authors = ["Kohei Suzuki <eagletmt@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chrono = "0.3"
-hyper = "0.10"
-iron = "0.5"
-libc = "0.2"
-postgres = { version = "0.14", features = ["with-chrono"] }
-router = "0.5"
-serde = "0.9"
-serde-xml-rs = "0.1"
-serde_derive = "0.9"
-serde_json = "0.9"
+anyhow = "1.0"
+chrono = "0.4"
+futures = "0.3"
+prost = "0.6"
+prost-types = "0.6"
+sqlx = { version = "0.4", features = ["runtime-tokio-rustls", "postgres", "chrono"] }
+tokio = { version = "0.2", features = ["macros", "process", "rt-core", "signal", "stream", "time"] }
+tonic = "0.3"
+reqwest = { version = "0.10", default-features = false, features = ["json", "rustls-tls", "brotli"] }
+serde-xml-rs = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+listenfd = "0.3"
+
+[build-dependencies]
+tonic-build = "0.3"
