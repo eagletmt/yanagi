@@ -2,14 +2,14 @@ use crate::proto::resources as pb;
 use crate::proto::services as pb_service;
 use crate::types::Job;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 pub struct SchedulerService {
-    jobs: Arc<Mutex<Vec<Job>>>,
+    jobs: Arc<RwLock<Vec<Job>>>,
     pool: sqlx::PgPool,
 }
 impl SchedulerService {
-    pub fn new(pool: sqlx::PgPool, jobs: Arc<Mutex<Vec<Job>>>) -> Self {
+    pub fn new(pool: sqlx::PgPool, jobs: Arc<RwLock<Vec<Job>>>) -> Self {
         Self { pool, jobs }
     }
 }
@@ -22,7 +22,7 @@ impl pb_service::scheduler_server::Scheduler for SchedulerService {
     ) -> Result<tonic::Response<pb_service::GetJobsResponse>, tonic::Status> {
         let jobs = self
             .jobs
-            .lock()
+            .read()
             .await
             .iter()
             .map(|job| pb::Job {

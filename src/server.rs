@@ -2,7 +2,7 @@ use crate::proto::services as pb_service;
 use crate::types::{Job, Program};
 use futures::StreamExt as _;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 enum Task {
     Shutdown,
@@ -16,7 +16,7 @@ pub async fn start() -> Result<(), anyhow::Error> {
         .connect("postgresql://kaede@longarch.enospc.tv/kaede")
         .await?;
 
-    let shared_jobs = Arc::new(Mutex::new(Vec::new()));
+    let shared_jobs = Arc::new(RwLock::new(Vec::new()));
     let scheduler_service =
         crate::services::scheduler::SchedulerService::new(pool.clone(), shared_jobs.clone());
     let (stop_tx, stop_rx) = futures::channel::oneshot::channel();
@@ -76,7 +76,7 @@ pub async fn start() -> Result<(), anyhow::Error> {
             Ok(expired) => Ok(Task::StartRecorder(expired.into_inner())),
             Err(e) => Err(anyhow::Error::from(e)),
         });
-        *shared_jobs.lock().await = jobs;
+        *shared_jobs.write().await = jobs;
 
         let mut stream = futures::stream::select(system_stream, delay_stream);
         while let Some(task) = stream.next().await {
